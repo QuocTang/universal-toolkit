@@ -1,0 +1,74 @@
+# Dependencies
+node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Build & Dist
+dist/
+build/
+out/
+.next/
+.nuxt/
+coverage/
+.turbo/
+
+# Environment
+.env
+.env.local
+.env.*.local
+.env.production.local
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.AppleDouble
+.LSOverride
+*.sublime-project
+*.sublime-workspace
+.vim/
+
+# OS
+Thumbs.db
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# Runtime
+*.log
+logs/
+*.pid
+*.seed
+*.pid.lock
+
+# Cache & Temp
+.cache/
+.eslintcache
+.prettier-ignore
+.stylelintcache
+.husky/
+tmp/
+temp/
+*.tmp
+
+# IDE temp
+.vscode/settings.json
+.vscode/launch.json
+.idea/workspace.xml
+
+# Optional npm files
+.npm/
+*.tgz
+
+# Misc
+.turborc.local.json
+.env.test.local
