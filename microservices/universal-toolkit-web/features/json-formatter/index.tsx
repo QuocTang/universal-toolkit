@@ -1,68 +1,27 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useJsonFormatter } from "./hooks/useJsonFormatter";
 import { JsonInput } from "./components/JsonInput";
 import { JsonOutput } from "./components/JsonOutput";
 import { JsonToolbar } from "./components/JsonToolbar";
 
+/**
+ * JSON Formatter — Entry Component
+ * Quy tắc: Component chỉ nhận data và render, không chứa business logic
+ */
 export default function JsonFormatterTool() {
-  const [input, setInput] = useState("");
-  const [output, setOutput] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [indentSize, setIndentSize] = useState(2);
-
-  const handleFormat = useCallback(() => {
-    try {
-      if (!input.trim()) {
-        setOutput("");
-        setError(null);
-        return;
-      }
-      const parsed = JSON.parse(input);
-      setOutput(JSON.stringify(parsed, null, indentSize));
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Invalid JSON");
-      setOutput("");
-    }
-  }, [input, indentSize]);
-
-  const handleMinify = useCallback(() => {
-    try {
-      if (!input.trim()) {
-        setOutput("");
-        setError(null);
-        return;
-      }
-      const parsed = JSON.parse(input);
-      setOutput(JSON.stringify(parsed));
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Invalid JSON");
-      setOutput("");
-    }
-  }, [input]);
-
-  const handleValidate = useCallback(() => {
-    try {
-      if (!input.trim()) {
-        setError(null);
-        return;
-      }
-      JSON.parse(input);
-      setError(null);
-      setOutput("✅ JSON hợp lệ!");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Invalid JSON");
-      setOutput("");
-    }
-  }, [input]);
-
-  const handleClear = useCallback(() => {
-    setInput("");
-    setOutput("");
-    setError(null);
-  }, []);
+  const {
+    input,
+    output,
+    error,
+    indentSize,
+    setInput,
+    setIndentSize,
+    handleFormat,
+    handleMinify,
+    handleValidate,
+    handleClear,
+  } = useJsonFormatter();
 
   return (
     <div className="space-y-4">
