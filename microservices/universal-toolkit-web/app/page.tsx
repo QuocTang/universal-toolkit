@@ -1,65 +1,105 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import Link from "next/link";
+import { useToolRegistryHelper } from "@/core/hooks/useToolRegistry";
+import { Badge } from "@/components/ui/badge";
+import { Wrench, ArrowRight } from "lucide-react";
+import { motion } from "framer-motion";
+import { AppShell } from "@/core/layout/AppShell";
+
+export default function HomePage() {
+  const { allCategories, getToolsByCategory, toolCount } =
+    useToolRegistryHelper();
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <AppShell>
+      {/* Hero Section */}
+      <div className="relative overflow-hidden rounded-xl border mb-8">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/10" />
+        <div className="relative px-6 py-12 sm:py-16">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="text-center space-y-4"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-primary text-primary-foreground shadow-lg">
+                <Wrench className="w-7 h-7" />
+              </div>
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
+              Universal Toolkit
+            </h1>
+            <p className="text-muted-foreground max-w-xl mx-auto">
+              Nền tảng web tích hợp nhiều tool tiện ích. Hiện có{" "}
+              <span className="font-semibold text-foreground">{toolCount}</span>{" "}
+              tool sẵn sàng.
+            </p>
+          </motion.div>
         </div>
-      </main>
-    </div>
+      </div>
+
+      {/* Tools Grid by Category */}
+      <div className="space-y-8">
+        {allCategories.map((category, catIndex) => {
+          const tools = getToolsByCategory(category.id);
+          if (tools.length === 0) return null;
+
+          const CategoryIcon = category.icon;
+
+          return (
+            <motion.section
+              key={category.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: catIndex * 0.1 }}
+              className="space-y-3"
+            >
+              <div className="flex items-center gap-2">
+                <CategoryIcon className="h-5 w-5 text-muted-foreground" />
+                <h2 className="text-lg font-semibold">{category.label}</h2>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {tools.map((tool) => {
+                  const ToolIcon = tool.icon;
+                  return (
+                    <Link key={tool.id} href={tool.path}>
+                      <div className="group relative rounded-xl border bg-card p-4 transition-all duration-200 hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5">
+                        <div className="flex items-start gap-3">
+                          <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary shrink-0 group-hover:bg-primary/20 transition-colors">
+                            <ToolIcon className="w-5 h-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-semibold text-sm truncate">
+                                {tool.name}
+                              </h3>
+                              {tool.badge && (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] px-1.5 py-0 shrink-0"
+                                >
+                                  {tool.badge}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {tool.description}
+                            </p>
+                          </div>
+                          <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-1" />
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            </motion.section>
+          );
+        })}
+      </div>
+    </AppShell>
   );
 }

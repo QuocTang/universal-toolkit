@@ -24,7 +24,7 @@ export const environment = {
     "NEXT_PUBLIC_API_BASE_URL",
     "http://localhost:8000", // Fallback for development
   ),
-  APP_NAME: getEnvVar("NEXT_PUBLIC_APP_NAME", "IRS Search"),
+  APP_NAME: getEnvVar("NEXT_PUBLIC_APP_NAME", "Universal Toolkit"),
   APP_URL: getEnvVar("NEXT_PUBLIC_APP_URL", "http://localhost:3000"),
   IS_PRODUCTION: process.env.NODE_ENV === "production",
   IS_DEVELOPMENT: process.env.NODE_ENV === "development",
