@@ -11,19 +11,20 @@ description: Hướng dẫn tích hợp một tool mới vào Universal Toolkit 
 
 Trước khi bắt đầu, xác nhận với user các thông tin:
 
-| Thông tin                  | Ví dụ                                                    | Bắt buộc |
-| -------------------------- | -------------------------------------------------------- | -------- |
-| **Tool name** (kebab-case) | `hash-generator`                                         | ✅       |
-| **Display name**           | `Hash Generator`                                         | ✅       |
-| **Description**            | `Generate MD5, SHA-1, SHA-256 hashes`                    | ✅       |
-| **Category**               | `developer` \| `design` \| `converter` \| `text` \| `3d` | ✅       |
-| **Icon** (Lucide)          | `Hash`                                                   | ✅       |
-| **Badge** (optional)       | `New`, `Popular`, `Beta`                                 | ❌       |
-| **Có gọi API không?**      | `có` / `không`                                           | ✅       |
+| Thông tin                  | Ví dụ                                        | Bắt buộc |
+| -------------------------- | -------------------------------------------- | -------- |
+| **Tool name** (kebab-case) | `hash-generator`                             | ✅       |
+| **Display name**           | `Hash Generator`                             | ✅       |
+| **Description**            | `Generate MD5, SHA-1, SHA-256 hashes`        | ✅       |
+| **Category**               | `CATEGORY_IDS.DEVELOPER` (xem enum bên dưới) | ✅       |
+| **Icon** (Lucide)          | `Hash`                                       | ✅       |
+| **Badge** (optional)       | `New`, `Popular`, `Beta`                     | ❌       |
+| **Có gọi API không?**      | `có` / `không`                               | ✅       |
+| **Cần localStorage?**      | `có` / `không`                               | ❌       |
 
-> **Categories hiện có** (xem `config/navigation.ts`):
-> `developer`, `design`, `converter`, `text`, `3d`
-> Nếu cần category mới → thêm vào `config/navigation.ts`
+> **Categories hiện có** — enum `CATEGORY_IDS` trong `config/navigation.ts`:
+> `DEVELOPER`, `DESIGN`, `CONVERTER`, `TEXT`, `THREE_D`
+> Nếu cần category mới → thêm vào enum `CATEGORY_IDS` trong `config/navigation.ts`
 
 ## Đường dẫn gốc
 
@@ -245,12 +246,15 @@ export default function <ToolName>Tool() {
 
 ## Bước 9: Tạo `registry.ts`
 
+> ⚠️ **Bắt buộc**: Dùng enum `CATEGORY_IDS` từ `config/navigation.ts`, KHÔNG hardcode category string.
+
 ```typescript
 // features/<tool-name>/registry.ts
 
 import { lazy } from "react";
 import { <IconName> } from "lucide-react";
 import type { ToolDefinition } from "@/core/registry/tool-registry.types";
+import { CATEGORY_IDS } from "@/config/navigation";
 
 const <ToolName>Tool = lazy(() => import("./index"));
 
@@ -259,7 +263,7 @@ export const <toolName>Registry: ToolDefinition = {
   name: "<Tool Display Name>",
   description: "<Description>",
   icon: <IconName>,
-  category: "<category-id>",
+  category: CATEGORY_IDS.<CATEGORY>,  // ❌ KHÔNG "developer" — ✅ CATEGORY_IDS.DEVELOPER
   tags: ["<tag1>", "<tag2>"],
   order: <number>,
   path: "/<tool-name>",
@@ -316,7 +320,10 @@ export const registeredTools: ToolDefinition[] = [
 ];
 ```
 
-> ⚠️ **Nếu cần category mới**: thêm vào `config/navigation.ts` trước.
+> ⚠️ **Nếu cần category mới**: thêm vào enum `CATEGORY_IDS` VÀ array `toolCategories` trong `config/navigation.ts`.
+>
+> ⚠️ **Nếu tool cần localStorage/sessionStorage/cookie**: khai báo key tại `core/app-storage/` tương ứng, KHÔNG hardcode key strings.
+> Ví dụ: `LOCAL_STORAGE_KEY.FEATURE.MY_TOOL_DRAFT = "feature.my-tool.draft"`
 
 ---
 
