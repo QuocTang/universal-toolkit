@@ -248,3 +248,70 @@ export default function ModuleNamePage() {
   );
 }
 ```
+
+---
+
+## 11. App Storage Keys (core/app-storage/)
+
+**Quy tắc**: Tất cả storage keys phải được khai báo tập trung, **KHÔNG** hardcode key strings rải rác trong code.
+
+### Cấu trúc
+
+```
+core/app-storage/
+├── local-storage.ts      # localStorage keys
+├── cookie-storage.ts     # Cookie keys
+└── session-storage.ts    # sessionStorage keys
+```
+
+### Quy ước đặt tên key
+
+Mỗi file storage có 2 nhóm:
+
+- **GLOBAL** — Keys dùng chung toàn app (theme, auth token, user preferences...)
+- **FEATURE** — Keys dành riêng cho từng feature module
+
+```typescript
+// core/app-storage/local-storage.ts
+
+export const LOCAL_STORAGE_KEY = {
+  GLOBAL: {
+    THEME: "global.theme",
+    // Thêm global keys tại đây
+  },
+  FEATURE: {
+    // Khi feature cần localStorage, khai báo tại đây
+    // MD_TO_DOCX_DRAFT: "feature.md-to-docx.draft",
+  },
+} as const;
+```
+
+### Cách sử dụng trong feature module
+
+```typescript
+// features/settings/hooks/useSettings.ts
+import { LOCAL_STORAGE_KEY } from "@/core/app-storage/local-storage";
+
+// ❌ SAI: hardcode key
+localStorage.getItem("theme");
+
+// ✅ ĐÚNG: dùng key từ app-storage
+localStorage.getItem(LOCAL_STORAGE_KEY.GLOBAL.THEME);
+```
+
+### Khi nào dùng loại storage nào?
+
+| Storage            | Khi nào dùng                             | Ví dụ                                  |
+| ------------------ | ---------------------------------------- | -------------------------------------- |
+| **localStorage**   | Persist qua sessions, client-only        | Theme, user preferences, draft content |
+| **sessionStorage** | Chỉ trong tab hiện tại, mất khi đóng tab | Form state tạm, scroll position        |
+| **Cookie**         | Cần gửi lên server (SSR, API auth)       | Auth token, locale (nếu cần SSR)       |
+
+---
+
+## 12. Quy tắc chung
+
+1. **Không hardcode magic strings** — Sử dụng constants từ `config.ts` hoặc `core/app-storage/`.
+2. **Tách IO, Logic, UI** — Services chỉ IO, Hooks chứa logic, Components chỉ render.
+3. **Feature module tự chứa** — Mỗi feature có types, config, hooks, components, index riêng.
+4. **Public API qua index.ts** — Module khác chỉ import từ feature index, không import trực tiếp file con.

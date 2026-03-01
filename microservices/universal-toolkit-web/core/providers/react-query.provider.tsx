@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { useState } from "react";
+import { LOCAL_STORAGE_KEY } from "@/core/app-storage/local-storage";
 
 /**
  * React Query Provider Setup
@@ -33,6 +34,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         defaultTheme="system"
         enableSystem
         disableTransitionOnChange
+        storageKey={LOCAL_STORAGE_KEY.GLOBAL.THEME}
       >
         {children}
         {/* Show devtools only in development */}
