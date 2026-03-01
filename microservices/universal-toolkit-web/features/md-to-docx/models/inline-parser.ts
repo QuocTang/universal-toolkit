@@ -128,13 +128,25 @@ export function parseInlineTokens(
 
         if (cached) {
           const scaled = scaleImage(cached.width, cached.height);
-          runs.push(
-            new ImageRun({
-              data: cached.data,
-              transformation: scaled,
-              type: "png",
-            }),
-          );
+          if (cached.format === "svg") {
+            // SVG cần fallback raster image cho Word cũ
+            runs.push(
+              new ImageRun({
+                data: cached.data,
+                transformation: scaled,
+                type: "svg",
+                fallback: { data: cached.data, type: "png" },
+              }),
+            );
+          } else {
+            runs.push(
+              new ImageRun({
+                data: cached.data,
+                transformation: scaled,
+                type: cached.format as "jpg" | "png" | "gif" | "bmp",
+              }),
+            );
+          }
         } else {
           const altText = img.text && img.text !== "alt text" ? img.text : "";
           const hrefText = img.href || "";

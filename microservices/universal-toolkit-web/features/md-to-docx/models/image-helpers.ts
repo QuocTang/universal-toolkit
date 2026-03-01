@@ -5,23 +5,39 @@
  */
 
 import { type Token, type Tokens } from "marked";
-import { TOKEN_TYPES, MAX_IMAGE_WIDTH, IMAGE_FALLBACK } from "../config";
+import {
+  TOKEN_TYPES,
+  MAX_IMAGE_WIDTH,
+  IMAGE_FALLBACK,
+  SUPPORTED_IMAGE_FORMATS,
+} from "../config";
 
 export interface FetchedImage {
   data: ArrayBuffer;
   width: number;
   height: number;
+  format: string;
 }
 
 export type ImageCache = Map<string, FetchedImage>;
 
 /**
  * Fetch image và lấy dimensions
+ * Return null nếu: fetch fail, CORS block, hoặc format không hỗ trợ
  */
 async function fetchImage(url: string): Promise<FetchedImage | null> {
   try {
     const response = await fetch(url);
     if (!response.ok) return null;
+
+    // Detect format từ Content-Type
+    const contentType = response.headers.get("content-type") || "";
+    const format = SUPPORTED_IMAGE_FORMATS[contentType.split(";")[0].trim()];
+
+    if (!format) {
+      console.warn(`Unsupported image format: ${contentType} (URL: ${url}).`);
+      return null;
+    }
 
     const blob = await response.blob();
     const arrayBuffer = await blob.arrayBuffer();
@@ -31,6 +47,7 @@ async function fetchImage(url: string): Promise<FetchedImage | null> {
       data: arrayBuffer,
       width: dimensions.width,
       height: dimensions.height,
+      format,
     };
   } catch {
     console.warn(`Failed to fetch image: ${url}`);
@@ -39,7 +56,8 @@ async function fetchImage(url: string): Promise<FetchedImage | null> {
 }
 
 /**
- * Lấy width/height thực tế của image bằng Image element
+ * Lấy width/height thực tế của image
+ * SVG có thể trả naturalWidth=0 → dùng fallback dimensions
  */
 function getImageDimensions(
   blob: Blob,
@@ -47,7 +65,10 @@ function getImageDimensions(
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      // SVG thường trả 0x0 nếu không set width/height cứng
+      resolve(w > 0 && h > 0 ? { width: w, height: h } : IMAGE_FALLBACK);
       URL.revokeObjectURL(img.src);
     };
     img.onerror = () => {

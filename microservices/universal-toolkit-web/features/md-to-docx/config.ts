@@ -162,8 +162,22 @@ export const HR_STYLE = {
   size: 1,
 } as const;
 
-/** Image fallback (when fetch fails) */
+/** Image fallback dimensions (khi không lấy được size thật) */
 export const IMAGE_FALLBACK = {
   width: 400,
   height: 300,
 } as const;
+
+/**
+ * Supported image formats trong DOCX
+ * Map: Content-Type → docx ImageRun type
+ * Thư viện docx hỗ trợ: "jpg" | "png" | "gif" | "bmp" | "svg"
+ */
+export const SUPPORTED_IMAGE_FORMATS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/gif": "gif",
+  "image/bmp": "bmp",
+  "image/svg+xml": "svg",
+};
