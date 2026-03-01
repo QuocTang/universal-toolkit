@@ -35,6 +35,16 @@ const HEADING_MAP: Record<
   6: HeadingLevel.HEADING_6,
 };
 
+// Heading font size scale (relative to body fontSize)
+const HEADING_SCALE: Record<number, number> = {
+  1: 2.0, // H1 = 2x body
+  2: 1.5, // H2 = 1.5x body
+  3: 1.25, // H3 = 1.25x body
+  4: 1.1, // H4 = 1.1x body
+  5: 1.0, // H5 = 1x body
+  6: 1.0, // H6 = 1x body
+};
+
 /**
  * Parse inline tokens (bold, italic, code, text) → TextRun[]
  */
@@ -236,12 +246,27 @@ export function markdownToDocx(
         const heading = token as Tokens.Heading;
         const headingLevel =
           HEADING_MAP[heading.depth] || HeadingLevel.HEADING_1;
+        const scale = HEADING_SCALE[heading.depth] || 1;
+        const headingFontSize = Math.round(options.fontSize * scale);
+        // Tạo options riêng cho heading với fontSize đã scale
+        const headingOptions: DocxOptions = {
+          ...options,
+          fontSize: headingFontSize,
+        };
         children.push(
           new Paragraph({
             heading: headingLevel,
             children: heading.tokens
-              ? parseInlineTokens(heading.tokens, options, { bold: true })
-              : [new TextRun({ text: heading.text, bold: true })],
+              ? parseInlineTokens(heading.tokens, headingOptions, {
+                  bold: true,
+                })
+              : [
+                  new TextRun({
+                    text: heading.text,
+                    bold: true,
+                    size: headingFontSize,
+                  }),
+                ],
             spacing: { before: 240, after: 120 },
           } as IParagraphOptions),
         );
