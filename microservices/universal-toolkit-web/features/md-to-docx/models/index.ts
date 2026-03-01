@@ -6,27 +6,23 @@
  *
  * Supported Markdown features (theo markdownguide.org/cheat-sheet):
  * ✅ Headings (#, ##, ### ...)
- * ✅ Bold (**text**)
- * ✅ Italic (*text*)
- * ✅ Bold + Italic (***text***)
+ * ✅ Bold (**text**) / Italic (*text*) / Bold+Italic (***text***)
  * ✅ Blockquote (> text)
- * ✅ Ordered List (1. 2. 3.)
- * ✅ Unordered List (- item)
- * ✅ Mixed inline in lists (- **bold** và normal)
- * ✅ Inline Code (`code`)
- * ✅ Fenced Code Block (```)
+ * ✅ Ordered/Unordered List (mixed inline)
+ * ✅ Inline Code / Fenced Code Block
  * ✅ Horizontal Rule (---)
  * ✅ Link ([text](url))
  * ✅ Table
  * ✅ Strikethrough (~~text~~)
  * ✅ Task List (- [x] / - [ ])
- * ⚠️ Image → rendered as text "[Image: alt]"
+ * ✅ Image ![alt](url) — fetch + embed thật
  */
 
 import {
   Document,
   Paragraph,
   TextRun,
+  ImageRun,
   HeadingLevel,
   Table,
   TableRow,
@@ -35,11 +31,27 @@ import {
   BorderStyle,
   type IParagraphOptions,
   type IRunOptions,
+  type ParagraphChild,
 } from "docx";
 import { marked, type Token, type Tokens } from "marked";
 import type { DocxOptions } from "../types";
 
-// Heading map
+// ==============================
+// Types
+// ==============================
+
+interface FetchedImage {
+  data: ArrayBuffer;
+  width: number;
+  height: number;
+}
+
+type ImageCache = Map<string, FetchedImage>;
+
+// ==============================
+// Constants
+// ==============================
+
 const HEADING_MAP: Record<
   number,
   (typeof HeadingLevel)[keyof typeof HeadingLevel]
@@ -52,7 +64,6 @@ const HEADING_MAP: Record<
   6: HeadingLevel.HEADING_6,
 };
 
-// Heading font size scale (relative to body fontSize)
 const HEADING_SCALE: Record<number, number> = {
   1: 2.0,
   2: 1.5,
@@ -62,15 +73,133 @@ const HEADING_SCALE: Record<number, number> = {
   6: 1.0,
 };
 
+// Max image width in DOCX (in px, ~6 inches at 96dpi = 576px)
+const MAX_IMAGE_WIDTH = 576;
+
+// ==============================
+// Image helpers
+// ==============================
+
 /**
- * Parse inline tokens (bold, italic, code, strikethrough, link, image, text) → TextRun[]
+ * Fetch image và lấy dimensions
+ */
+async function fetchImage(url: string): Promise<FetchedImage | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+
+    const blob = await response.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+
+    // Lấy dimensions bằng cách load vào Image element
+    const dimensions = await getImageDimensions(blob);
+
+    return {
+      data: arrayBuffer,
+      width: dimensions.width,
+      height: dimensions.height,
+    };
+  } catch {
+    console.warn(`Failed to fetch image: ${url}`);
+    return null;
+  }
+}
+
+/**
+ * Lấy width/height thực tế của image
+ */
+function getImageDimensions(
+  blob: Blob,
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = () => {
+      resolve({ width: 400, height: 300 }); // fallback
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(blob);
+  });
+}
+
+/**
+ * Scale image để fit max width, giữ tỷ lệ
+ */
+function scaleImage(
+  width: number,
+  height: number,
+): { width: number; height: number } {
+  if (width <= MAX_IMAGE_WIDTH) return { width, height };
+  const ratio = MAX_IMAGE_WIDTH / width;
+  return {
+    width: MAX_IMAGE_WIDTH,
+    height: Math.round(height * ratio),
+  };
+}
+
+/**
+ * Thu thập tất cả image URLs từ tokens (recursive)
+ */
+function collectImageUrls(tokens: Token[]): string[] {
+  const urls: string[] = [];
+
+  for (const token of tokens) {
+    if (token.type === "image") {
+      const img = token as Tokens.Image;
+      if (img.href) urls.push(img.href);
+    }
+
+    // Recursive vào children tokens
+    if (
+      "tokens" in token &&
+      Array.isArray((token as { tokens: Token[] }).tokens)
+    ) {
+      urls.push(...collectImageUrls((token as { tokens: Token[] }).tokens));
+    }
+    if ("items" in token && Array.isArray((token as Tokens.List).items)) {
+      for (const item of (token as Tokens.List).items) {
+        if (item.tokens) urls.push(...collectImageUrls(item.tokens));
+      }
+    }
+  }
+
+  return [...new Set(urls)]; // deduplicate
+}
+
+/**
+ * Fetch tất cả images song song
+ */
+async function prefetchImages(tokens: Token[]): Promise<ImageCache> {
+  const urls = collectImageUrls(tokens);
+  const cache: ImageCache = new Map();
+
+  const results = await Promise.allSettled(
+    urls.map(async (url) => {
+      const img = await fetchImage(url);
+      if (img) cache.set(url, img);
+    }),
+  );
+
+  return cache;
+}
+
+// ==============================
+// Inline token parser
+// ==============================
+
+/**
+ * Parse inline tokens → ParagraphChild[] (TextRun + ImageRun)
  */
 function parseInlineTokens(
   tokens: Token[],
   options: DocxOptions,
+  imageCache: ImageCache,
   inheritStyle?: Partial<IRunOptions>,
-): TextRun[] {
-  const runs: TextRun[] = [];
+): ParagraphChild[] {
+  const runs: ParagraphChild[] = [];
 
   for (const token of tokens) {
     switch (token.type) {
@@ -78,7 +207,7 @@ function parseInlineTokens(
         const strong = token as Tokens.Strong;
         if (strong.tokens) {
           runs.push(
-            ...parseInlineTokens(strong.tokens, options, {
+            ...parseInlineTokens(strong.tokens, options, imageCache, {
               ...inheritStyle,
               bold: true,
             }),
@@ -91,7 +220,7 @@ function parseInlineTokens(
         const em = token as Tokens.Em;
         if (em.tokens) {
           runs.push(
-            ...parseInlineTokens(em.tokens, options, {
+            ...parseInlineTokens(em.tokens, options, imageCache, {
               ...inheritStyle,
               italics: true,
             }),
@@ -101,11 +230,10 @@ function parseInlineTokens(
       }
 
       case "del": {
-        // Strikethrough: ~~text~~
         const del = token as Tokens.Del;
         if (del.tokens) {
           runs.push(
-            ...parseInlineTokens(del.tokens, options, {
+            ...parseInlineTokens(del.tokens, options, imageCache, {
               ...inheritStyle,
               strike: true,
             }),
@@ -130,7 +258,14 @@ function parseInlineTokens(
       case "text": {
         const text = token as Tokens.Text;
         if ("tokens" in text && text.tokens) {
-          runs.push(...parseInlineTokens(text.tokens, options, inheritStyle));
+          runs.push(
+            ...parseInlineTokens(
+              text.tokens,
+              options,
+              imageCache,
+              inheritStyle,
+            ),
+          );
         } else {
           runs.push(
             new TextRun({
@@ -146,10 +281,9 @@ function parseInlineTokens(
 
       case "link": {
         const link = token as Tokens.Link;
-        // Render link text with underline + blue color
         if (link.tokens) {
           runs.push(
-            ...parseInlineTokens(link.tokens, options, {
+            ...parseInlineTokens(link.tokens, options, imageCache, {
               ...inheritStyle,
               color: "0563C1",
               underline: {},
@@ -171,18 +305,38 @@ function parseInlineTokens(
       }
 
       case "image": {
-        // DOCX image embedding phức tạp (cần fetch binary), render as placeholder text
         const img = token as Tokens.Image;
-        runs.push(
-          new TextRun({
-            text: `[Image: ${img.text || img.href}]`,
-            font: options.fontFamily,
-            size: options.fontSize,
-            italics: true,
-            color: "999999",
-            ...inheritStyle,
-          }),
-        );
+        const cached = img.href ? imageCache.get(img.href) : null;
+
+        if (cached) {
+          // Embed ảnh thật
+          const scaled = scaleImage(cached.width, cached.height);
+          runs.push(
+            new ImageRun({
+              data: cached.data,
+              transformation: scaled,
+              type: "png",
+            }),
+          );
+        } else {
+          // Fallback: text placeholder nếu fetch fail
+          const altText = img.text && img.text !== "alt text" ? img.text : "";
+          const hrefText = img.href || "";
+          const label = altText
+            ? `[${altText}] (${hrefText})`
+            : `[${hrefText}]`;
+          runs.push(
+            new TextRun({
+              text: label,
+              font: options.fontFamily,
+              size: options.fontSize,
+              italics: true,
+              color: "0563C1",
+              underline: {},
+              ...inheritStyle,
+            }),
+          );
+        }
         break;
       }
 
@@ -191,11 +345,17 @@ function parseInlineTokens(
         break;
       }
 
-      // Handle paragraph tokens that appear inside list items
       case "paragraph": {
         const para = token as Tokens.Paragraph;
         if (para.tokens) {
-          runs.push(...parseInlineTokens(para.tokens, options, inheritStyle));
+          runs.push(
+            ...parseInlineTokens(
+              para.tokens,
+              options,
+              imageCache,
+              inheritStyle,
+            ),
+          );
         } else {
           runs.push(
             new TextRun({
@@ -228,19 +388,25 @@ function parseInlineTokens(
   return runs;
 }
 
-/**
- * Parse a table token → Table
- */
-function parseTable(token: Tokens.Table, options: DocxOptions): Table {
+// ==============================
+// Block parsers
+// ==============================
+
+function parseTable(
+  token: Tokens.Table,
+  options: DocxOptions,
+  imageCache: ImageCache,
+): Table {
   const allRows: TableRow[] = [];
 
-  // Header row
   const headerCells = token.header.map(
     (cell) =>
       new TableCell({
         children: [
           new Paragraph({
-            children: parseInlineTokens(cell.tokens, options, { bold: true }),
+            children: parseInlineTokens(cell.tokens, options, imageCache, {
+              bold: true,
+            }),
           }),
         ],
         width: {
@@ -251,14 +417,13 @@ function parseTable(token: Tokens.Table, options: DocxOptions): Table {
   );
   allRows.push(new TableRow({ children: headerCells }));
 
-  // Data rows
   for (const row of token.rows) {
     const cells = row.map(
       (cell) =>
         new TableCell({
           children: [
             new Paragraph({
-              children: parseInlineTokens(cell.tokens, options),
+              children: parseInlineTokens(cell.tokens, options, imageCache),
             }),
           ],
           width: {
@@ -276,19 +441,15 @@ function parseTable(token: Tokens.Table, options: DocxOptions): Table {
   });
 }
 
-/**
- * Parse list items → Paragraph[]
- * Hỗ trợ: mixed inline formatting, nested lists, task lists
- */
 function parseList(
   token: Tokens.List,
   options: DocxOptions,
+  imageCache: ImageCache,
   depth: number = 0,
 ): Paragraph[] {
   const paragraphs: Paragraph[] = [];
 
   token.items.forEach((item, index) => {
-    // Task list checkbox
     let prefix: string;
     if (item.task) {
       prefix = item.checked ? "☑ " : "☐ ";
@@ -296,10 +457,8 @@ function parseList(
       prefix = token.ordered ? `${index + 1}. ` : "•  ";
     }
 
-    // Extract inline tokens from list item
-    // item.tokens thường chứa [paragraph, ...] wrapper, cần unwrap
     const runs = item.tokens
-      ? parseInlineTokens(item.tokens, options)
+      ? parseInlineTokens(item.tokens, options, imageCache)
       : [
           new TextRun({
             text: item.text,
@@ -308,7 +467,6 @@ function parseList(
           }),
         ];
 
-    // Prepend bullet/number/checkbox
     runs.unshift(
       new TextRun({
         text: prefix,
@@ -325,12 +483,16 @@ function parseList(
       }),
     );
 
-    // Handle nested lists inside this item
     if (item.tokens) {
       for (const subToken of item.tokens) {
         if (subToken.type === "list") {
           paragraphs.push(
-            ...parseList(subToken as Tokens.List, options, depth + 1),
+            ...parseList(
+              subToken as Tokens.List,
+              options,
+              imageCache,
+              depth + 1,
+            ),
           );
         }
       }
@@ -340,14 +502,19 @@ function parseList(
   return paragraphs;
 }
 
-/**
- * Main conversion: Markdown → Document
- */
-export function markdownToDocx(
+// ==============================
+// Main conversion (ASYNC — vì cần fetch images)
+// ==============================
+
+export async function markdownToDocx(
   markdown: string,
   options: DocxOptions,
-): Document {
+): Promise<Document> {
   const tokens = marked.lexer(markdown);
+
+  // Pre-fetch tất cả images song song
+  const imageCache = await prefetchImages(tokens);
+
   const children: (Paragraph | Table)[] = [];
 
   for (const token of tokens) {
@@ -366,7 +533,7 @@ export function markdownToDocx(
           new Paragraph({
             heading: headingLevel,
             children: heading.tokens
-              ? parseInlineTokens(heading.tokens, headingOptions, {
+              ? parseInlineTokens(heading.tokens, headingOptions, imageCache, {
                   bold: true,
                 })
               : [
@@ -387,7 +554,7 @@ export function markdownToDocx(
         children.push(
           new Paragraph({
             children: para.tokens
-              ? parseInlineTokens(para.tokens, options)
+              ? parseInlineTokens(para.tokens, options, imageCache)
               : [
                   new TextRun({
                     text: para.text,
@@ -432,7 +599,7 @@ export function markdownToDocx(
             children.push(
               new Paragraph({
                 children: bqPara.tokens
-                  ? parseInlineTokens(bqPara.tokens, options, {
+                  ? parseInlineTokens(bqPara.tokens, options, imageCache, {
                       italics: true,
                     })
                   : [
@@ -461,13 +628,13 @@ export function markdownToDocx(
 
       case "list": {
         const list = token as Tokens.List;
-        children.push(...parseList(list, options));
+        children.push(...parseList(list, options, imageCache));
         break;
       }
 
       case "table": {
         const table = token as Tokens.Table;
-        children.push(parseTable(table, options));
+        children.push(parseTable(table, options, imageCache));
         children.push(new Paragraph({ spacing: { after: 120 } }));
         break;
       }

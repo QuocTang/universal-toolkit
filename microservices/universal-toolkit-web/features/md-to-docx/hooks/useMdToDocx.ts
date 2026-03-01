@@ -39,7 +39,7 @@ export function useMdToDocx() {
         title: fileName,
       };
 
-      const doc = markdownToDocx(markdown, options);
+      const doc = await markdownToDocx(markdown, options);
       const blob = await Packer.toBlob(doc);
       saveAs(blob, `${fileName || "document"}.docx`);
       setLastConvertedAt(new Date());

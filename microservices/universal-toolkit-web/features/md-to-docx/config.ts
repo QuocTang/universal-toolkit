@@ -49,5 +49,7 @@ function hello() {
 1. Mục có thứ tự 1
 2. Mục có thứ tự 2
 3. Mục có thứ tự 3
+
+![Image](https://media.daily.dev/image/upload/f_auto,q_auto/v1/posts/39ca1be49ef666fcb0b28ceec7f62316?_a=AQAEuop)
 `,
 } as const;
