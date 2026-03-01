@@ -24,6 +24,7 @@ export default function MdToDocxTool() {
     handleConvert,
     handleLoadSample,
     handleClear,
+    handleFileUpload,
   } = useMdToDocx();
 
   return (
@@ -57,7 +58,11 @@ export default function MdToDocxTool() {
         </div>
       )}
 
-      <MdEditor value={markdown} onChange={setMarkdown} />
+      <MdEditor
+        value={markdown}
+        onChange={setMarkdown}
+        onFileUpload={handleFileUpload}
+      />
     </div>
   );
 }

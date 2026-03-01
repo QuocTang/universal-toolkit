@@ -61,6 +61,33 @@ export function useMdToDocx() {
     setLastConvertedAt(null);
   }, []);
 
+  const handleFileUpload = useCallback((file: File) => {
+    if (
+      !file.name.endsWith(".md") &&
+      !file.name.endsWith(".markdown") &&
+      !file.name.endsWith(".txt")
+    ) {
+      setError("Chỉ hỗ trợ file .md, .markdown, .txt");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result;
+      if (typeof content === "string") {
+        setMarkdown(content);
+        // Tự động set tên file từ file upload (bỏ extension)
+        const baseName = file.name.replace(/\.(md|markdown|txt)$/i, "");
+        setFileName(baseName);
+        setError(null);
+      }
+    };
+    reader.onerror = () => {
+      setError("Lỗi khi đọc file");
+    };
+    reader.readAsText(file);
+  }, []);
+
   return {
     // State
     markdown,
@@ -81,5 +108,6 @@ export function useMdToDocx() {
     handleConvert,
     handleLoadSample,
     handleClear,
+    handleFileUpload,
   };
 }
