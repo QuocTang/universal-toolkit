@@ -3,6 +3,24 @@
 /**
  * MD to DOCX Conversion Model
  * Transform: Markdown string → docx Document
+ *
+ * Supported Markdown features (theo markdownguide.org/cheat-sheet):
+ * ✅ Headings (#, ##, ### ...)
+ * ✅ Bold (**text**)
+ * ✅ Italic (*text*)
+ * ✅ Bold + Italic (***text***)
+ * ✅ Blockquote (> text)
+ * ✅ Ordered List (1. 2. 3.)
+ * ✅ Unordered List (- item)
+ * ✅ Mixed inline in lists (- **bold** và normal)
+ * ✅ Inline Code (`code`)
+ * ✅ Fenced Code Block (```)
+ * ✅ Horizontal Rule (---)
+ * ✅ Link ([text](url))
+ * ✅ Table
+ * ✅ Strikethrough (~~text~~)
+ * ✅ Task List (- [x] / - [ ])
+ * ⚠️ Image → rendered as text "[Image: alt]"
  */
 
 import {
@@ -10,7 +28,6 @@ import {
   Paragraph,
   TextRun,
   HeadingLevel,
-  AlignmentType,
   Table,
   TableRow,
   TableCell,
@@ -37,16 +54,16 @@ const HEADING_MAP: Record<
 
 // Heading font size scale (relative to body fontSize)
 const HEADING_SCALE: Record<number, number> = {
-  1: 2.0, // H1 = 2x body
-  2: 1.5, // H2 = 1.5x body
-  3: 1.25, // H3 = 1.25x body
-  4: 1.1, // H4 = 1.1x body
-  5: 1.0, // H5 = 1x body
-  6: 1.0, // H6 = 1x body
+  1: 2.0,
+  2: 1.5,
+  3: 1.25,
+  4: 1.1,
+  5: 1.0,
+  6: 1.0,
 };
 
 /**
- * Parse inline tokens (bold, italic, code, text) → TextRun[]
+ * Parse inline tokens (bold, italic, code, strikethrough, link, image, text) → TextRun[]
  */
 function parseInlineTokens(
   tokens: Token[],
@@ -69,6 +86,7 @@ function parseInlineTokens(
         }
         break;
       }
+
       case "em": {
         const em = token as Tokens.Em;
         if (em.tokens) {
@@ -81,6 +99,21 @@ function parseInlineTokens(
         }
         break;
       }
+
+      case "del": {
+        // Strikethrough: ~~text~~
+        const del = token as Tokens.Del;
+        if (del.tokens) {
+          runs.push(
+            ...parseInlineTokens(del.tokens, options, {
+              ...inheritStyle,
+              strike: true,
+            }),
+          );
+        }
+        break;
+      }
+
       case "codespan": {
         const code = token as Tokens.Codespan;
         runs.push(
@@ -93,9 +126,9 @@ function parseInlineTokens(
         );
         break;
       }
+
       case "text": {
         const text = token as Tokens.Text;
-        // Handle text that might contain nested tokens
         if ("tokens" in text && text.tokens) {
           runs.push(...parseInlineTokens(text.tokens, options, inheritStyle));
         } else {
@@ -110,20 +143,72 @@ function parseInlineTokens(
         }
         break;
       }
+
       case "link": {
         const link = token as Tokens.Link;
+        // Render link text with underline + blue color
+        if (link.tokens) {
+          runs.push(
+            ...parseInlineTokens(link.tokens, options, {
+              ...inheritStyle,
+              color: "0563C1",
+              underline: {},
+            }),
+          );
+        } else {
+          runs.push(
+            new TextRun({
+              text: link.text,
+              font: options.fontFamily,
+              size: options.fontSize,
+              color: "0563C1",
+              underline: {},
+              ...inheritStyle,
+            }),
+          );
+        }
+        break;
+      }
+
+      case "image": {
+        // DOCX image embedding phức tạp (cần fetch binary), render as placeholder text
+        const img = token as Tokens.Image;
         runs.push(
           new TextRun({
-            text: link.text,
+            text: `[Image: ${img.text || img.href}]`,
             font: options.fontFamily,
             size: options.fontSize,
-            color: "0563C1",
-            underline: {},
+            italics: true,
+            color: "999999",
             ...inheritStyle,
           }),
         );
         break;
       }
+
+      case "br": {
+        runs.push(new TextRun({ break: 1 }));
+        break;
+      }
+
+      // Handle paragraph tokens that appear inside list items
+      case "paragraph": {
+        const para = token as Tokens.Paragraph;
+        if (para.tokens) {
+          runs.push(...parseInlineTokens(para.tokens, options, inheritStyle));
+        } else {
+          runs.push(
+            new TextRun({
+              text: para.text,
+              font: options.fontFamily,
+              size: options.fontSize,
+              ...inheritStyle,
+            }),
+          );
+        }
+        break;
+      }
+
       default: {
         if ("text" in token) {
           runs.push(
@@ -193,12 +278,26 @@ function parseTable(token: Tokens.Table, options: DocxOptions): Table {
 
 /**
  * Parse list items → Paragraph[]
+ * Hỗ trợ: mixed inline formatting, nested lists, task lists
  */
-function parseList(token: Tokens.List, options: DocxOptions): Paragraph[] {
+function parseList(
+  token: Tokens.List,
+  options: DocxOptions,
+  depth: number = 0,
+): Paragraph[] {
   const paragraphs: Paragraph[] = [];
 
   token.items.forEach((item, index) => {
-    const bullet = token.ordered ? `${index + 1}. ` : "•  ";
+    // Task list checkbox
+    let prefix: string;
+    if (item.task) {
+      prefix = item.checked ? "☑ " : "☐ ";
+    } else {
+      prefix = token.ordered ? `${index + 1}. ` : "•  ";
+    }
+
+    // Extract inline tokens from list item
+    // item.tokens thường chứa [paragraph, ...] wrapper, cần unwrap
     const runs = item.tokens
       ? parseInlineTokens(item.tokens, options)
       : [
@@ -209,10 +308,10 @@ function parseList(token: Tokens.List, options: DocxOptions): Paragraph[] {
           }),
         ];
 
-    // Prepend bullet/number
+    // Prepend bullet/number/checkbox
     runs.unshift(
       new TextRun({
-        text: bullet,
+        text: prefix,
         font: options.fontFamily,
         size: options.fontSize,
       }),
@@ -222,9 +321,20 @@ function parseList(token: Tokens.List, options: DocxOptions): Paragraph[] {
       new Paragraph({
         children: runs,
         spacing: { after: 60 },
-        indent: { left: 360 },
+        indent: { left: 360 * (depth + 1) },
       }),
     );
+
+    // Handle nested lists inside this item
+    if (item.tokens) {
+      for (const subToken of item.tokens) {
+        if (subToken.type === "list") {
+          paragraphs.push(
+            ...parseList(subToken as Tokens.List, options, depth + 1),
+          );
+        }
+      }
+    }
   });
 
   return paragraphs;
@@ -248,7 +358,6 @@ export function markdownToDocx(
           HEADING_MAP[heading.depth] || HeadingLevel.HEADING_1;
         const scale = HEADING_SCALE[heading.depth] || 1;
         const headingFontSize = Math.round(options.fontSize * scale);
-        // Tạo options riêng cho heading với fontSize đã scale
         const headingOptions: DocxOptions = {
           ...options,
           fontSize: headingFontSize,
@@ -311,7 +420,6 @@ export function markdownToDocx(
             }),
           );
         }
-        // Add spacing after code block
         children.push(new Paragraph({ spacing: { after: 120 } }));
         break;
       }
@@ -324,7 +432,9 @@ export function markdownToDocx(
             children.push(
               new Paragraph({
                 children: bqPara.tokens
-                  ? parseInlineTokens(bqPara.tokens, options, { italics: true })
+                  ? parseInlineTokens(bqPara.tokens, options, {
+                      italics: true,
+                    })
                   : [
                       new TextRun({
                         text: bqPara.text,
@@ -335,7 +445,11 @@ export function markdownToDocx(
                     ],
                 indent: { left: 360 },
                 border: {
-                  left: { style: BorderStyle.SINGLE, size: 6, color: "999999" },
+                  left: {
+                    style: BorderStyle.SINGLE,
+                    size: 6,
+                    color: "999999",
+                  },
                 },
                 spacing: { after: 120 },
               }),
@@ -362,7 +476,11 @@ export function markdownToDocx(
         children.push(
           new Paragraph({
             border: {
-              bottom: { style: BorderStyle.SINGLE, size: 1, color: "cccccc" },
+              bottom: {
+                style: BorderStyle.SINGLE,
+                size: 1,
+                color: "cccccc",
+              },
             },
             spacing: { before: 120, after: 120 },
           }),
