@@ -3,6 +3,7 @@
 import { lazy } from "react";
 import { Palette } from "lucide-react";
 import type { ToolDefinition } from "@/core/registry/tool-registry.types";
+import { CATEGORY_IDS } from "@/config/navigation";
 
 const ColorPickerTool = lazy(() => import("./index"));
 
@@ -11,7 +12,7 @@ export const colorPickerRegistry: ToolDefinition = {
   name: "Color Picker",
   description: "Pick colors and convert between HEX, RGB, HSL formats",
   icon: Palette,
-  category: "design",
+  category: CATEGORY_IDS.DESIGN,
   tags: ["color", "picker", "hex", "rgb", "hsl", "design"],
   order: 1,
   path: "/color-picker",

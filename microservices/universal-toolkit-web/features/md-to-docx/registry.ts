@@ -3,6 +3,7 @@
 import { lazy } from "react";
 import { FileOutput } from "lucide-react";
 import type { ToolDefinition } from "@/core/registry/tool-registry.types";
+import { CATEGORY_IDS } from "@/config/navigation";
 
 const MdToDocxTool = lazy(() => import("./index"));
 
@@ -11,7 +12,7 @@ export const mdToDocxRegistry: ToolDefinition = {
   name: "MD to DOCX",
   description: "Chuyển đổi Markdown sang file Word (.docx)",
   icon: FileOutput,
-  category: "converter",
+  category: CATEGORY_IDS.CONVERTER,
   tags: ["markdown", "docx", "word", "convert", "export", "document"],
   order: 1,
   path: "/md-to-docx",
