@@ -2,23 +2,23 @@
 
 /**
  * Parse inline Markdown tokens → DOCX ParagraphChild[]
- * Handles: bold, italic, strikethrough, code, text, link, image, br, paragraph wrapper
+ * Handles: bold, italic, strikethrough, code, text, link, image, br, math inline
  */
 
 import { TextRun, ImageRun, type IRunOptions, type ParagraphChild } from "docx";
 import { type Token, type Tokens } from "marked";
-import type { DocxOptions } from "../types";
+import type { ConversionContext } from "../types";
 import { TOKEN_TYPES, CODE_STYLE, LINK_STYLE } from "../config";
-import { scaleImage, type ImageCache } from "./image-helpers";
+import { scaleImage } from "./image-helpers";
 import { ommlToParagraphChild } from "./math-helpers";
 
 export function parseInlineTokens(
   tokens: Token[],
-  options: DocxOptions,
-  imageCache: ImageCache,
+  ctx: ConversionContext,
   inheritStyle?: Partial<IRunOptions>,
 ): ParagraphChild[] {
   const runs: ParagraphChild[] = [];
+  const { options, imageCache } = ctx;
 
   for (const token of tokens) {
     switch (token.type) {
@@ -26,7 +26,7 @@ export function parseInlineTokens(
         const strong = token as Tokens.Strong;
         if (strong.tokens) {
           runs.push(
-            ...parseInlineTokens(strong.tokens, options, imageCache, {
+            ...parseInlineTokens(strong.tokens, ctx, {
               ...inheritStyle,
               bold: true,
             }),
@@ -39,7 +39,7 @@ export function parseInlineTokens(
         const em = token as Tokens.Em;
         if (em.tokens) {
           runs.push(
-            ...parseInlineTokens(em.tokens, options, imageCache, {
+            ...parseInlineTokens(em.tokens, ctx, {
               ...inheritStyle,
               italics: true,
             }),
@@ -52,7 +52,7 @@ export function parseInlineTokens(
         const del = token as Tokens.Del;
         if (del.tokens) {
           runs.push(
-            ...parseInlineTokens(del.tokens, options, imageCache, {
+            ...parseInlineTokens(del.tokens, ctx, {
               ...inheritStyle,
               strike: true,
             }),
@@ -78,12 +78,7 @@ export function parseInlineTokens(
         const text = token as Tokens.Text;
         if ("tokens" in text && text.tokens) {
           runs.push(
-            ...parseInlineTokens(
-              text.tokens,
-              options,
-              imageCache,
-              inheritStyle,
-            ),
+            ...parseInlineTokens(text.tokens, ctx, inheritStyle),
           );
         } else {
           runs.push(
@@ -102,7 +97,7 @@ export function parseInlineTokens(
         const link = token as Tokens.Link;
         if (link.tokens) {
           runs.push(
-            ...parseInlineTokens(link.tokens, options, imageCache, {
+            ...parseInlineTokens(link.tokens, ctx, {
               ...inheritStyle,
               color: LINK_STYLE.color,
               underline: {},
@@ -130,7 +125,6 @@ export function parseInlineTokens(
         if (cached) {
           const scaled = scaleImage(cached.width, cached.height);
           if (cached.format === "svg") {
-            // SVG cần fallback raster image cho Word cũ
             runs.push(
               new ImageRun({
                 data: cached.data,
@@ -171,12 +165,11 @@ export function parseInlineTokens(
 
       case TOKEN_TYPES.MATH_INLINE: {
         const mathToken = token as unknown as { latex: string };
-        const omml = options.mathCache?.get(mathToken.latex);
+        const omml = ctx.mathCache.get(mathToken.latex);
         const mathChild = omml ? ommlToParagraphChild(omml) : null;
         if (mathChild) {
           runs.push(mathChild);
         } else {
-          // Fallback: render raw LaTeX in code font
           runs.push(
             new TextRun({
               text: `$${mathToken.latex}$`,
@@ -198,12 +191,7 @@ export function parseInlineTokens(
         const para = token as Tokens.Paragraph;
         if (para.tokens) {
           runs.push(
-            ...parseInlineTokens(
-              para.tokens,
-              options,
-              imageCache,
-              inheritStyle,
-            ),
+            ...parseInlineTokens(para.tokens, ctx, inheritStyle),
           );
         } else {
           runs.push(

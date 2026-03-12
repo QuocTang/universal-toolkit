@@ -5,6 +5,7 @@
  */
 
 import { type Token, type Tokens } from "marked";
+import type { FetchedImage, ImageCache } from "../types";
 import {
   TOKEN_TYPES,
   MAX_IMAGE_WIDTH,
@@ -12,14 +13,7 @@ import {
   SUPPORTED_IMAGE_FORMATS,
 } from "../config";
 
-export interface FetchedImage {
-  data: ArrayBuffer;
-  width: number;
-  height: number;
-  format: string;
-}
-
-export type ImageCache = Map<string, FetchedImage>;
+export type { FetchedImage, ImageCache };
 
 /**
  * Fetch image và lấy dimensions

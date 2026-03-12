@@ -14,9 +14,8 @@ import {
   WidthType,
 } from "docx";
 import { type Tokens } from "marked";
-import type { DocxOptions } from "../types";
+import type { ConversionContext } from "../types";
 import { TOKEN_TYPES, INDENT_SIZE, SPACING } from "../config";
-import type { ImageCache } from "./image-helpers";
 import { parseInlineTokens } from "./inline-parser";
 
 /**
@@ -24,8 +23,7 @@ import { parseInlineTokens } from "./inline-parser";
  */
 export function parseTable(
   token: Tokens.Table,
-  options: DocxOptions,
-  imageCache: ImageCache,
+  ctx: ConversionContext,
 ): Table {
   const allRows: TableRow[] = [];
 
@@ -34,9 +32,7 @@ export function parseTable(
       new TableCell({
         children: [
           new Paragraph({
-            children: parseInlineTokens(cell.tokens, options, imageCache, {
-              bold: true,
-            }),
+            children: parseInlineTokens(cell.tokens, ctx, { bold: true }),
           }),
         ],
         width: {
@@ -53,7 +49,7 @@ export function parseTable(
         new TableCell({
           children: [
             new Paragraph({
-              children: parseInlineTokens(cell.tokens, options, imageCache),
+              children: parseInlineTokens(cell.tokens, ctx),
             }),
           ],
           width: {
@@ -77,8 +73,7 @@ export function parseTable(
  */
 export function parseList(
   token: Tokens.List,
-  options: DocxOptions,
-  imageCache: ImageCache,
+  ctx: ConversionContext,
   depth: number = 0,
 ): Paragraph[] {
   const paragraphs: Paragraph[] = [];
@@ -92,20 +87,20 @@ export function parseList(
     }
 
     const runs = item.tokens
-      ? parseInlineTokens(item.tokens, options, imageCache)
+      ? parseInlineTokens(item.tokens, ctx)
       : [
           new TextRun({
             text: item.text,
-            font: options.fontFamily,
-            size: options.fontSize,
+            font: ctx.options.fontFamily,
+            size: ctx.options.fontSize,
           }),
         ];
 
     runs.unshift(
       new TextRun({
         text: prefix,
-        font: options.fontFamily,
-        size: options.fontSize,
+        font: ctx.options.fontFamily,
+        size: ctx.options.fontSize,
       }),
     );
 
@@ -121,12 +116,7 @@ export function parseList(
       for (const subToken of item.tokens) {
         if (subToken.type === TOKEN_TYPES.LIST) {
           paragraphs.push(
-            ...parseList(
-              subToken as Tokens.List,
-              options,
-              imageCache,
-              depth + 1,
-            ),
+            ...parseList(subToken as Tokens.List, ctx, depth + 1),
           );
         }
       }
