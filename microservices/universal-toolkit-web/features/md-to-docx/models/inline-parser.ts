@@ -10,6 +10,7 @@ import { type Token, type Tokens } from "marked";
 import type { DocxOptions } from "../types";
 import { TOKEN_TYPES, CODE_STYLE, LINK_STYLE } from "../config";
 import { scaleImage, type ImageCache } from "./image-helpers";
+import { ommlToParagraphChild } from "./math-helpers";
 
 export function parseInlineTokens(
   tokens: Token[],
@@ -161,6 +162,26 @@ export function parseInlineTokens(
               italics: true,
               color: LINK_STYLE.color,
               underline: {},
+              ...inheritStyle,
+            }),
+          );
+        }
+        break;
+      }
+
+      case TOKEN_TYPES.MATH_INLINE: {
+        const mathToken = token as unknown as { latex: string };
+        const omml = options.mathCache?.get(mathToken.latex);
+        const mathChild = omml ? ommlToParagraphChild(omml) : null;
+        if (mathChild) {
+          runs.push(mathChild);
+        } else {
+          // Fallback: render raw LaTeX in code font
+          runs.push(
+            new TextRun({
+              text: `$${mathToken.latex}$`,
+              font: CODE_STYLE.font,
+              size: options.fontSize,
               ...inheritStyle,
             }),
           );

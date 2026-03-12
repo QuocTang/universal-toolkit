@@ -12,4 +12,6 @@ export interface DocxOptions {
   fontSize: number;
   fontFamily: string;
   title: string;
+  /** Cached OMML strings keyed by LaTeX source. Populated by prefetchMathOmml(). */
+  mathCache?: Map<string, string>;
 }

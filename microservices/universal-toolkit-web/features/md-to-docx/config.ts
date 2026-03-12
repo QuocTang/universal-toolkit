@@ -22,6 +22,7 @@ export const TOKEN_TYPES = {
   TABLE: "table",
   HR: "hr",
   SPACE: "space",
+  MATH_BLOCK: "mathBlock",
 
   // Inline-level
   STRONG: "strong",
@@ -32,6 +33,7 @@ export const TOKEN_TYPES = {
   LINK: "link",
   IMAGE: "image",
   BR: "br",
+  MATH_INLINE: "mathInline",
 } as const;
 
 // ==============================

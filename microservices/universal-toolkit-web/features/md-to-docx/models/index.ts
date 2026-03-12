@@ -17,9 +17,10 @@ import {
   Paragraph,
   TextRun,
   BorderStyle,
+  AlignmentType,
   type IParagraphOptions,
 } from "docx";
-import { marked, type Tokens } from "marked";
+import { type Tokens } from "marked";
 import type { DocxOptions } from "../types";
 
 import {
@@ -36,6 +37,13 @@ import {
 import { prefetchImages } from "./image-helpers";
 import { parseInlineTokens } from "./inline-parser";
 import { parseTable, parseList } from "./block-parsers";
+import {
+  getMarkedInstance,
+  extractMathFormulas,
+  prefetchMathOmml,
+  wrapInMathPara,
+  ommlToParagraphChild,
+} from "./math-helpers";
 
 // Re-export cho external usage
 export { prefetchImages } from "./image-helpers";
@@ -50,7 +58,14 @@ export async function markdownToDocx(
   markdown: string,
   options: DocxOptions,
 ): Promise<Document> {
-  const tokens = marked.lexer(markdown);
+  const markedInstance = getMarkedInstance();
+  const tokens = markedInstance.lexer(markdown);
+
+  // Prefetch OMML for all LaTeX formulas found in the document
+  const mathFormulas = extractMathFormulas(tokens);
+  const mathCache = await prefetchMathOmml(mathFormulas);
+  const optionsWithMath: DocxOptions = { ...options, mathCache };
+
   const imageCache = await prefetchImages(tokens);
   const children: (Paragraph | import("docx").Table)[] = [];
 
@@ -60,9 +75,9 @@ export async function markdownToDocx(
         const heading = token as Tokens.Heading;
         const headingLevel = HEADING_MAP[heading.depth] || HEADING_MAP[1];
         const scale = HEADING_SCALE[heading.depth] || 1;
-        const headingFontSize = Math.round(options.fontSize * scale);
+        const headingFontSize = Math.round(optionsWithMath.fontSize * scale);
         const headingOptions: DocxOptions = {
-          ...options,
+          ...optionsWithMath,
           fontSize: headingFontSize,
         };
         children.push(
@@ -93,12 +108,12 @@ export async function markdownToDocx(
         children.push(
           new Paragraph({
             children: para.tokens
-              ? parseInlineTokens(para.tokens, options, imageCache)
+              ? parseInlineTokens(para.tokens, optionsWithMath, imageCache)
               : [
                   new TextRun({
                     text: para.text,
-                    font: options.fontFamily,
-                    size: options.fontSize,
+                    font: optionsWithMath.fontFamily,
+                    size: optionsWithMath.fontSize,
                   }),
                 ],
             spacing: { after: SPACING.paragraphAfter },
@@ -116,7 +131,7 @@ export async function markdownToDocx(
                 new TextRun({
                   text: line || " ",
                   font: CODE_STYLE.font,
-                  size: options.fontSize - CODE_STYLE.fontSizeOffset,
+                  size: optionsWithMath.fontSize - CODE_STYLE.fontSizeOffset,
                 }),
               ],
               spacing: { after: SPACING.codeLineAfter },
@@ -140,15 +155,18 @@ export async function markdownToDocx(
             children.push(
               new Paragraph({
                 children: bqPara.tokens
-                  ? parseInlineTokens(bqPara.tokens, options, imageCache, {
-                      italics: true,
-                    })
+                  ? parseInlineTokens(
+                      bqPara.tokens,
+                      optionsWithMath,
+                      imageCache,
+                      { italics: true },
+                    )
                   : [
                       new TextRun({
                         text: bqPara.text,
                         italics: true,
-                        font: options.fontFamily,
-                        size: options.fontSize,
+                        font: optionsWithMath.fontFamily,
+                        size: optionsWithMath.fontSize,
                       }),
                     ],
                 indent: { left: INDENT_SIZE },
@@ -168,12 +186,16 @@ export async function markdownToDocx(
       }
 
       case TOKEN_TYPES.LIST: {
-        children.push(...parseList(token as Tokens.List, options, imageCache));
+        children.push(
+          ...parseList(token as Tokens.List, optionsWithMath, imageCache),
+        );
         break;
       }
 
       case TOKEN_TYPES.TABLE: {
-        children.push(parseTable(token as Tokens.Table, options, imageCache));
+        children.push(
+          parseTable(token as Tokens.Table, optionsWithMath, imageCache),
+        );
         children.push(
           new Paragraph({ spacing: { after: SPACING.paragraphAfter } }),
         );
@@ -200,6 +222,42 @@ export async function markdownToDocx(
         children.push(
           new Paragraph({ spacing: { after: SPACING.spaceAfter } }),
         );
+        break;
+      }
+
+      case TOKEN_TYPES.MATH_BLOCK: {
+        const mathToken = token as unknown as { latex: string };
+        const omml = mathCache.get(mathToken.latex);
+        const mathChild = omml
+          ? ommlToParagraphChild(wrapInMathPara(omml))
+          : null;
+        if (mathChild) {
+          // Wrap in <m:oMathPara> for centered display in Word
+          children.push(
+            new Paragraph({
+              children: [mathChild],
+              alignment: AlignmentType.CENTER,
+              spacing: {
+                before: SPACING.headingAfter,
+                after: SPACING.headingAfter,
+              },
+            }),
+          );
+        } else {
+          // Fallback: render raw LaTeX as code block
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `$$${mathToken.latex}$$`,
+                  font: CODE_STYLE.font,
+                  size: optionsWithMath.fontSize,
+                }),
+              ],
+              spacing: { after: SPACING.paragraphAfter },
+            }),
+          );
+        }
         break;
       }
 
