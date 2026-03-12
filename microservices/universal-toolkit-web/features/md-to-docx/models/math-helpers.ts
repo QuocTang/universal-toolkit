@@ -88,16 +88,31 @@ function walkTokens(tokens: Token[], seen: Map<string, boolean>): void {
       }
     }
 
-    // Recurse into nested tokens
+    // Recurse into nested inline tokens
     if ("tokens" in token && Array.isArray(token.tokens)) {
       walkTokens(token.tokens as Token[], seen);
     }
+    // List items
     if (
       "items" in token &&
       Array.isArray((token as { items: unknown[] }).items)
     ) {
       for (const item of (token as { items: { tokens?: Token[] }[] }).items) {
         if (item.tokens) walkTokens(item.tokens, seen);
+      }
+    }
+    // Table: traverse header cells and row cells
+    if (token.type === "table") {
+      type TableCell = { tokens?: Token[] };
+      type TableToken = { header: TableCell[]; rows: TableCell[][] };
+      const table = token as unknown as TableToken;
+      for (const cell of table.header) {
+        if (cell.tokens) walkTokens(cell.tokens, seen);
+      }
+      for (const row of table.rows) {
+        for (const cell of row) {
+          if (cell.tokens) walkTokens(cell.tokens, seen);
+        }
       }
     }
   }
