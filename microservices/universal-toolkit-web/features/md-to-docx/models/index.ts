@@ -45,10 +45,6 @@ import {
   ommlToParagraphChild,
 } from "./math-helpers";
 
-// Re-export cho external usage
-export { prefetchImages } from "./image-helpers";
-export { parseInlineTokens } from "./inline-parser";
-export { parseTable, parseList } from "./block-parsers";
 
 /**
  * Main conversion: Markdown string → DOCX Document
